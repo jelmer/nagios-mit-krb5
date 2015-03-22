@@ -1,0 +1,43 @@
+#!/usr/bin/python
+# Simple kadmin server checker
+# Copyright (C) 2014 Jelmer Vernooij <jelmer@samba.org>
+# Published under the Apache license, v2 or later
+
+import optparse
+import subprocess
+import sys
+
+parser = optparse.OptionParser()
+parser.add_option("--realm", type=str, dest="realm", help="Realm.", default=None)
+parser.add_option("--principal", type=str, dest="principal", help="Principal to connect as.", default=None)
+parser.add_option("--admin-server", type=str, dest="admin_server", help="Specific admin server to connect to.", default=None)
+parser.add_option("--keytab", type=str, dest="keytab", help="Keytab to use.", default=None)
+(opts, args) = parser.parse_args()
+
+if args:
+    parser.print_usage()
+
+argv = ["kadmin"]
+if opts.principal:
+    argv.append("-p%s" % opts.principal)
+if opts.realm:
+    argv.append("-r%s" % opts.realm)
+if opts.admin_server:
+    argv.extend(["-s", opts.admin_server])
+if opts.keytab:
+    argv.extend(["-k", "-t%s" % opts.keytab])
+
+p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+(stdout, stderr) = p.communicate("getprivs\nquit\n")
+
+if p.returncode != 0:
+    print "CRITICAL - kadmin returned non-zero (%s)" % stderr
+    sys.exit(2)
+
+if stderr != "":
+    print "CRITICAL - kadmin failed (%s)" % stderr
+    sys.exit(2)
+
+print "OK - kadmin working"
+
+sys.exit(0)

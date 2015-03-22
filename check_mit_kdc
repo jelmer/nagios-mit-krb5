@@ -1,0 +1,68 @@
+#!/usr/bin/python
+# Simple KDC checker
+# Copyright (C) 2014 Jelmer Vernooij <jelmer@samba.org>
+# Published under the Apache license, v2 or later
+
+import optparse
+import os
+import subprocess
+import sys
+import tempfile
+
+parser = optparse.OptionParser()
+parser.add_option("--principal", type=str, dest="principal", help="Principal to connect as.", default=None)
+parser.add_option("--kdc", type=str, dest="kdc", help="Specific KDC to connect to.", default=None)
+parser.add_option("--keytab", type=str, dest="keytab", help="Keytab to use.", default=None)
+(opts, args) = parser.parse_args()
+
+if args:
+    parser.print_usage()
+
+try:
+    (principal, realm) = opts.principal.split("@")
+except IndexError:
+    parser.print_usage()
+
+(fd, p) = tempfile.mkstemp()
+f = os.fdopen(fd, 'w')
+
+f.write("""[libdefaults]
+default_realm = %s
+""" % (realm, ))
+
+if opts.kdc:
+    f.write("""
+[realms]
+%s = {
+    kdc = %s
+}
+""" % (realm, opts.kdc))
+
+f.close()
+
+argv = ["kinit"]
+if opts.keytab:
+    argv.extend(["-k", "-t%s" % opts.keytab])
+if opts.principal:
+    argv.append(opts.principal)
+
+env = dict(os.environ)
+env["KRB5_CONFIG"] = p
+p = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+(stdout, stderr) = p.communicate()
+
+if p.returncode != 0:
+    print "CRITICAL - kinit returned non-zero (%s)" % stderr
+    sys.exit(2)
+
+if stderr != "":
+    print "CRITICAL - kinit failed (%s)" % ";".join(stderr.splitlines())
+    sys.exit(2)
+
+if stdout != "":
+    print "CRITICAL - kinit failed (%s)" % ";".join(stdout.splitlines())
+    sys.exit(2)
+
+print "OK - kinit working"
+
+sys.exit(0)
